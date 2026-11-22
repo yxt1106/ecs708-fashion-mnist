@@ -1,0 +1,23 @@
+{
+  "models": [
+    "Logistic Regression",
+    "Random Forest"
+  ],
+
+  "weights_search": [
+    0.25,
+    0.5,
+    0.75
+  ],
+
+  "selection_metric": "validation_accuracy",
+
+  "probability_fusion": {
+    "formula": "alpha * LR + (1 - alpha) * RF"
+  },
+
+  "inference_benchmark": {
+    "repeats": 3,
+    "warmup_batch_size": 256
+  }
+}
