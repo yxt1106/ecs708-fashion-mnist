@@ -1,1 +1,40 @@
+{
+  "dataset": {
+    "name": "FashionMNIST",
+    "root": "./data",
+    "download": true,
+    "transform": "ToTensor",
+    "input_shape": [1, 28, 28],
+    "num_classes": 10
+  },
 
+  "official_dataset_sizes": {
+    "train": 60000,
+    "test": 10000
+  },
+
+  "main_split": {
+    "method": "train_test_split",
+    "stratify": true,
+    "validation_size": 10000,
+    "random_state": 42
+  },
+
+  "training_subset": {
+    "method": "stratified_sample",
+    "sample_size": 10000,
+    "random_state": 43
+  },
+
+  "effective_dataset_sizes": {
+    "train": 10000,
+    "validation": 10000,
+    "test": 10000
+  },
+
+  "seeds": {
+    "split": 42,
+    "cpu": 43,
+    "cluster": 44
+  }
+}
