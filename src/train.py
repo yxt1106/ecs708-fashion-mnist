@@ -1,245 +1,271 @@
-transform = transforms.ToTensor()
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
-# Get Train & Test data
-train_data = datasets.FashionMNIST(
-  root="./data",
-  train=True,
-  download=True,
-  transform=transform
-)
+import random
+import copy
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-test_data = datasets.FashionMNIST(
-  root="./data",
-  train=False,
-  download=True,
-  transform=transform
-)
+from torch.utils.data import DataLoader
 
-train_labels = train_data.targets.numpy()
-test_labels = test_data.targets.numpy()
 
-print("Train:", len(train_labels))
-print("Test:", len(test_labels))
-# Random seeds
-# Random seed: Ensures that data is randomly assigned,
-# while also guaranteeing that, due to this random assignment,
-# no data points end up in the wrong dataset.
-SEED_SPLIT = 42
-SEED_CPU = 43
-SEED_CLUSTER = 44
+# Reproducibility
+SEED_MLP = 45
 
-# Store the index of training dataset
-train_all_indices = np.arange(len(train_data))
+def set_seed(seed):
 
-# Split the official training set, stratified and seeded: 50,000 train / 10,000 validation
-train_indices, val_indices = train_test_split(
-  train_all_indices,
-  test_size=10000,
-  random_state=SEED_SPLIT,
-  stratify=train_labels
-)
+    random.seed(seed)
+    np.random.seed(seed)
 
-print("Train:", len(train_indices))
-print("Validation:", len(val_indices))
-# Helper function
-# Extract specific number of samples from existing data index with a certain proportion
-def stratified_sample(base_indices, labels, n_samples, seed):
-  local_indices = np.arange(len(base_indices))
-  selected_local, _ = train_test_split(
-    local_indices,
-    train_size=n_samples,
-    random_state=seed,
-    stratify=labels[base_indices]
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+set_seed(SEED_MLP)
+PART2_BATCH_SIZE = 128
+
+def make_part2_loaders(seed):
+  generator = torch.Generator()
+  generator.manual_seed(seed)
+
+  # Training loader: shuffled
+  part2_train_loader = DataLoader(
+    train_dataset,
+    batch_size=PART2_BATCH_SIZE,
+    shuffle=True,
+    generator=generator,
+    num_workers=0
   )
-  # The indices relative to original dataset
-  return base_indices[selected_local]
 
-# Reduced dataset from 5,0000 to 10,000
-train_indices = stratified_sample(
-  train_indices,
-  train_labels,
-  n_samples=10000,
-  seed=SEED_CPU
-)
+  # Training evaluation loader: fixed order
+  part2_train_eval_loader = DataLoader(
+    train_dataset,
+    batch_size=256,
+    shuffle=False,
+    num_workers=0
+  )
 
-# Clustering / feature extraction subsets with stratified_sample
+  # Validation loader: fixed order
+  part2_val_loader = DataLoader(
+    val_dataset,
+    batch_size=256,
+    shuffle=False,
+    num_workers=0
+  )
 
-# Extract 3000 data from training set
-cluster_train_indices = stratified_sample(
-  train_indices,
-  train_labels,
-  n_samples=3000,
-  seed=SEED_CLUSTER
-)
+  return (
+    part2_train_loader,
+    part2_train_eval_loader,
+    part2_val_loader
+  )
 
-# Same as above, but this is validation datasets
-cluster_val_indices = stratified_sample(
-  val_indices,
-  train_labels,
-  n_samples=1000,
-  seed=SEED_CLUSTER
-)
+# TRaining loop
+def train_one_epoch(
+  model,
+  train_loader,
+  criterion,
+  optimizer,
+  device
+):
+  model.train()
+  for images, labels in train_loader:
+    images = images.to(device)
+    labels = labels.to(device)
 
-test_all_indices = np.arange(len(test_data))
+    # Clear old gradients
+    optimizer.zero_grad(set_to_none=True)
 
-cluster_test_indices = stratified_sample(
-  test_all_indices,
-  test_labels,
-  n_samples=1000,
-  seed=SEED_CLUSTER
-)
+    # Forward propagation
+    outputs = model(images)
 
-# Create subset from dataset according to specific index
-# e.g. train_indices
-train_dataset = Subset(
-  train_data, train_indices.tolist()
-)
+    # Calculate loss
+    loss = criterion(outputs, labels)
 
-val_dataset = Subset(
-  train_data, val_indices.tolist()
-)
+    # Backpropagation
+    loss.backward()
 
-test_dataset = test_data
+    # Update model parameters
+    optimizer.step()
 
-cluster_train_dataset = Subset(
-  train_data, cluster_train_indices.tolist()
-)
+# Validation Loop
+@torch.no_grad()
+def evaluate_model(
+  model,
+  data_loader,
+  criterion,
+  device
+):
+  model.eval()
+  total_loss = 0.0
+  total_correct = 0
+  total_samples = 0
 
-cluster_val_dataset = Subset(
-  train_data, cluster_val_indices.tolist()
-)
+  for images, labels in data_loader:
+    images = images.to(device)
+    labels = labels.to(device)
 
-cluster_test_dataset = Subset(
-  test_data, cluster_test_indices.tolist()
-)
+    # Forward propagation
+    outputs = model(images)
 
-# Create DataLoaders
-# Read the data from dataset to model for training or validation
-train_loader = DataLoader(
-  train_dataset,
-  batch_size=64,
-  shuffle=True,
-  num_workers=0
-)
+    # Calculate loss
+    loss = criterion(outputs, labels)
 
-# CPU-based training option
-train_loader = DataLoader(
-  train_dataset,
-  batch_size=64,
-  shuffle=True,
-  num_workers=0
-)
+    # Predicted classes
+    predictions = outputs.argmax(dim=1)
+    batch_size = labels.size(0)
+    total_loss += loss.item() * batch_size
+    total_correct += (
+        predictions == labels
+    ).sum().item()
+    total_samples += batch_size
 
-# Validation and test
-val_loader = DataLoader(
-  val_dataset,
-  batch_size=128,
-  shuffle=False,
-  num_workers=0
-)
+  average_loss = total_loss / total_samples
+  accuracy = total_correct / total_samples
 
-test_loader = DataLoader(
-  test_dataset,
-  batch_size=128,
-  shuffle=False,
-  num_workers=0
-)
+  return {
+    "loss": average_loss,
+    "accuracy": accuracy
+  }
+# Combine dataLoader, training, evaluate into a function
+def run_mlp_experiment(
+  hidden_sizes=(256, 128),
+  learning_rate=0.001,
+  seed=SEED_MLP,
+  max_epochs=20,
+  patience=5,
+  min_delta=1e-4
+):
 
-# Clustering / feature extraction
-cluster_train_loader = DataLoader(
-  cluster_train_dataset,
-  batch_size=128,
-  shuffle=False,
-  num_workers=0
-)
+  # Reproducibility
+  set_seed(seed)
 
-cluster_val_loader = DataLoader(
-  cluster_val_dataset,
-  batch_size=128,
-  shuffle=False,
-  num_workers=0
-)
+  # Create DataLoaders
+  (
+    train_loader,
+    train_eval_loader,
+    val_loader
+  ) = make_part2_loaders(seed)
 
-cluster_test_loader = DataLoader(
-  cluster_test_dataset,
-  batch_size=128,
-  shuffle=False,
-  num_workers=0
-)
+  # Create model
+  model = MLP(
+    hidden_sizes=hidden_sizes
+  ).to(device)
 
-np.savez_compressed(
-  "fashion_mnist_indices.npz",
+  # Loss function: Chose CrossEntropy to fit multi classification tasks
+  criterion = nn.CrossEntropyLoss()
 
-  seed_split=SEED_SPLIT,
-  seed_cpu=SEED_CPU,
-  seed_cluster=SEED_CLUSTER,
+  # Optimizer
+  optimizer = optim.Adam(
+    model.parameters(),
+    lr=learning_rate
+  )
 
-  train_indices=train_indices,
-  val_indices=val_indices,
+  # Trainable parameter count
+  parameter_count = sum(
+    p.numel()
+    for p in model.parameters()
+    if p.requires_grad
+  )
 
-  cpu_train_indices=train_indices,
+  # Report best data
+  best_val_loss = float("inf")
+  best_epoch = 0
+  best_state = None
+  epochs_without_improvement = 0
+  history = []
 
-  cluster_train_indices=cluster_train_indices,
-  cluster_val_indices=cluster_val_indices,
-  cluster_test_indices=cluster_test_indices
-)
+  # Main training loop
+  for epoch in range(1, max_epochs + 1):
+    # Training
+    train_one_epoch(
+      model,
+      train_loader,
+      criterion,
+      optimizer,
+      device
+    )
 
-# The data length we get
-print("Main Training:", len(train_dataset))
-print("CPU Training:", len(train_dataset))
-print("Validation:", len(val_dataset))
-print("Test:", len(test_dataset))
+    # Evaluate training performance
+    train_metrics = evaluate_model(
+      model,
+      train_eval_loader,
+      criterion,
+      device
+    )
 
-print("Cluster Training:", len(cluster_train_dataset))
-print("Cluster Validation:", len(cluster_val_dataset))
-print("Cluster Test:", len(cluster_test_dataset))
-# Class names
-class_names = train_data.classes
-class_names
+    # Evaluate validation performance
+    val_metrics = evaluate_model(
+      model,
+      val_loader,
+      criterion,
+      device
+    )
 
-# Linear Regression
-from sklearn.linear_model import LogisticRegression
-def loader_to_numpy(loader):
-  images_list = []
-  labels_list = []
+    # Record metrics
+    history.append({
+      "epoch": epoch,
+      "train_loss": train_metrics["loss"],
+      "train_accuracy": train_metrics["accuracy"],
+      "val_loss": val_metrics["loss"],
+      "val_accuracy": val_metrics["accuracy"]
+    })
 
-  for images, labels in loader:
-    # [batch_size, 1, 28, 28] -> [batch_size, 784]
-    images = images.flatten(start_dim=1)
-    images_list.append(images.numpy())
-    labels_list.append(labels.numpy())
-
-  X = np.concatenate(images_list).astype(np.float32)
-  y = np.concatenate(labels_list).astype(np.int64)
-  return X, y
-
-
-# Training subset
-classical_train_loader = DataLoader(
-  train_dataset,
-  batch_size=256,
-  shuffle=False,
-  num_workers=0
-)
-
-# Validation set
-classical_val_loader = DataLoader(
-  val_dataset,
-  batch_size=256,
-  shuffle=False,
-  num_workers=0
-)
-
-
-# Extract data
-X_train_classical, y_train_classical = loader_to_numpy(
-  classical_train_loader
-)
-
-X_val_classical, y_val_classical = loader_to_numpy(
-  classical_val_loader
-)
+    # Checkpoint using validation loss
+    if val_metrics["loss"] < best_val_loss - min_delta:
+      best_val_loss = val_metrics["loss"]
+      best_epoch = epoch
+      best_state = copy.deepcopy(
+          model.state_dict()
+      )
+      epochs_without_improvement = 0
+    else:
+      epochs_without_improvement += 1
 
 
-print("Classical training:", X_train_classical.shape)
-print("Validation:", X_val_classical.shape)
+    print(
+      f"Epoch [{epoch}/{max_epochs}] "
+      f"Train Loss: {train_metrics['loss']:.4f} "
+      f"Val Loss: {val_metrics['loss']:.4f} "
+      f"Train Acc: {train_metrics['accuracy']:.4f} "
+      f"Val Acc: {val_metrics['accuracy']:.4f}"
+    )
+
+
+    # Early stopping
+    if epochs_without_improvement >= patience:
+      print("Early stopping triggered.")
+      break
+
+
+  # Restore best checkpoint
+  if best_state is None:
+    raise RuntimeError("No valid model checkpoint was saved.")
+
+  model.load_state_dict(best_state)
+
+
+  history_df = pd.DataFrame(history)
+
+  best_record = history_df.loc[
+    history_df["epoch"] == best_epoch
+  ].iloc[0]
+
+
+  return {
+    "model": model,
+    "history": history_df,
+    "parameter_count": parameter_count,
+    "best_epoch": best_epoch,
+    "best_val_loss": best_val_loss,
+    "best_train_accuracy": best_record["train_accuracy"],
+    "best_val_accuracy": best_record["val_accuracy"],
+    "epochs_trained": len(history_df)
+  }

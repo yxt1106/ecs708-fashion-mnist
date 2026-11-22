@@ -31,3 +31,62 @@ rf_model.fit(
 
 
 print("Both models have been trained.")
+# Training two models using exactly the same training data
+lr_model.fit(
+  X_train_classical, # features
+  y_train_classical # labels
+)
+
+rf_model.fit(
+  X_train_classical,
+  y_train_classical
+)
+
+
+print("Both models have been trained.")
+class MLP(nn.Module):
+  def __init__(self, hidden_sizes=(256, 128), num_classes=10):
+    super().__init__()
+    self.hidden_layers = nn.ModuleList()
+    input_size = 784
+
+    # Hidden layers
+    for hidden_size in hidden_sizes:
+      layer = nn.Linear(
+        input_size,
+        hidden_size
+      )
+      self.hidden_layers.append(layer)
+      input_size = hidden_size
+
+    # Output layer
+    self.output_layer = nn.Linear(
+      input_size,
+      num_classes
+    )
+
+    # Weight initialization
+    for layer in self.hidden_layers:
+      nn.init.kaiming_uniform_(
+        layer.weight,
+        nonlinearity="relu"
+      )
+      nn.init.zeros_(layer.bias)
+
+    # Output layer initialization
+    nn.init.xavier_uniform_(
+      self.output_layer.weight
+    )
+    nn.init.zeros_(
+      self.output_layer.bias
+    )
+
+  def forward(self, x):
+    # Flatten [batch, 1, 28, 28] -> [batch, 784]
+    x = torch.flatten(x, start_dim=1)
+    # Hidden layers
+    for layer in self.hidden_layers:
+      x = F.relu(layer(x))
+    # Output logits
+    x = self.output_layer(x)
+    return x
