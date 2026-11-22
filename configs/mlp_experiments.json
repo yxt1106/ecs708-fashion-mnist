@@ -1,0 +1,31 @@
+{
+  "model": {
+    "input_size": 784,
+    "num_classes": 10
+  },
+
+  "baseline": {
+    "hidden_sizes": [256, 128],
+    "learning_rate": 0.001,
+    "optimizer": "Adam",
+    "loss": "CrossEntropyLoss",
+    "seed": 45,
+    "batch_size": 128,
+    "evaluation_batch_size": 256,
+    "max_epochs": 20,
+    "patience": 5,
+    "min_delta": 0.0001
+  },
+
+  "capacity_experiments": {
+    "Small": [128, 64],
+    "Baseline": [256, 128],
+    "Large": [512, 256]
+  },
+
+  "learning_rate_experiments": [
+    0.0001,
+    0.001,
+    0.01
+  ]
+}
