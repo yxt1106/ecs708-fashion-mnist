@@ -1,0 +1,42 @@
+{
+  "dataset": {
+    "sample_size": 3000,
+    "sampling_method": "random",
+    "random_state": 44
+  },
+
+  "kmeans": {
+    "init": "k-means++",
+    "n_init": 10,
+    "max_iter": 300,
+    "random_state": 44
+  },
+
+  "k_selection": {
+    "K_values": [2, 5, 8, 10, 12, 15, 20],
+    "silhouette_sample_size": 1000,
+    "silhouette_random_state": 123,
+    "selection_metric": "silhouette"
+  },
+
+  "stability": {
+    "seeds": [11, 22, 33],
+    "n_init_values": [1, 10]
+  },
+
+  "hierarchical": {
+    "sample_size": 400,
+    "sampling_random_state": 404,
+    "linkage": "ward",
+    "metric": "euclidean"
+  },
+
+  "representation_comparison": {
+    "comparison_sample_size": 1000,
+    "random_state": 123,
+    "representations": [
+      "Raw Pixels",
+      "MLP Features"
+    ]
+  }
+}
