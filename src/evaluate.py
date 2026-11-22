@@ -465,3 +465,182 @@ best_threshold = threshold_df.loc[
 
 print("Best threshold:")
 display(best_threshold)
+def loader_to_numpy(loader): # Transfer data into numpy format
+  X, y = [], []
+
+  for images, labels in loader:
+    X.append(
+      images.flatten(start_dim=1).numpy()
+    )
+    y.append(labels.numpy())
+
+  return ( # concatenate batches
+    np.concatenate(X), # image features
+    np.concatenate(y) # image labels
+  )
+
+
+X_test_classical, y_test_classical = loader_to_numpy(
+  test_loader
+)
+
+
+# Make probability columns follow class labels 0-9
+def predict_proba_10(model, X):
+  # The probability of each sample belonging to each category
+  probabilities = model.predict_proba(X)
+  result = np.zeros( # Create a fixed 10-column matrix
+    (len(X), 10)
+  )
+  # Place the raw predicted probabilities into the positions corresponding to their respective classes.
+  result[:, model.classes_.astype(int)] = probabilities
+  return result
+
+
+# Validation probabilities
+# Predicted probabilities from the LR model on the validation set
+val_lr_prob = predict_proba_10(
+  lr_model,
+  X_val_classical
+)
+
+# Predicted probabilities from the RF model on the validation set
+val_rf_prob = predict_proba_10(
+  rf_model,
+  X_val_classical
+)
+
+
+# Test probabilities
+test_lr_prob = predict_proba_10(
+  lr_model,
+  X_test_classical
+)
+
+test_rf_prob = predict_proba_10(
+  rf_model,
+  X_test_classical
+)
+from sklearn.metrics import accuracy_score
+
+weights = [0.25, 0.5, 0.75]
+weight_results = []
+
+for alpha in weights:
+  ensemble_prob = ( # Combining probabilities from LR and RF on the validation set
+    alpha * val_lr_prob
+    + (1 - alpha) * val_rf_prob
+  )
+  pred = ensemble_prob.argmax(axis=1) # Select the category with the highest probability for each image.
+  acc = accuracy_score(
+    y_val_classical,
+    pred
+  )
+  weight_results.append({
+    "LR Weight": alpha,
+    "RF Weight": 1 - alpha,
+    "Validation Accuracy": acc
+  })
+
+
+weight_df = pd.DataFrame(weight_results)
+display(weight_df)
+
+
+# Select the best weight using validation accuracy
+best_alpha = weight_df.loc[
+  weight_df["Validation Accuracy"].idxmax(),
+  "LR Weight"
+]
+
+print("Selected LR weight:", best_alpha)
+print("Selected RF weight:", 1 - best_alpha)
+# Ensemble probabilities
+# Combine the predicted probabilities from two models with the best weights
+val_ensemble_prob = (
+  best_alpha * val_lr_prob
+  + (1 - best_alpha) * val_rf_prob
+)
+
+test_ensemble_prob = (
+  best_alpha * test_lr_prob
+  + (1 - best_alpha) * test_rf_prob
+)
+
+# Organize data
+models_val = {
+  "Logistic Regression": val_lr_prob,
+  "Random Forest": val_rf_prob,
+  "Ensemble": val_ensemble_prob
+}
+
+models_test = {
+  "Logistic Regression": test_lr_prob,
+  "Random Forest": test_rf_prob,
+  "Ensemble": test_ensemble_prob
+}
+
+
+def overall_results(models, y_true):
+  rows = []
+
+  for name, probabilities in models.items():
+    predictions = probabilities.argmax(axis=1)
+    rows.append({
+      "Model": name,
+      "Accuracy": accuracy_score(
+        y_true,
+        predictions
+      )
+    })
+
+  return pd.DataFrame(rows)
+
+
+print("Validation Results")
+
+display(
+  overall_results(
+    models_val,
+    y_val_classical
+  )
+)
+
+
+print("Test Results")
+
+display(
+  overall_results(
+    models_test,
+    y_test_classical
+  )
+)
+# Show Datas
+from sklearn.metrics import classification_report
+
+class_results = []
+
+for name, probabilities in models_test.items():
+  predictions = probabilities.argmax(axis=1)
+  report = classification_report(
+    y_test_classical,
+    predictions,
+    labels=np.arange(10),
+    target_names=class_names,
+    output_dict=True,
+    zero_division=0
+  )
+
+  for class_name in class_names:
+    class_results.append({
+      "Model": name,
+      "Class": class_name,
+      "Precision": report[class_name]["precision"],
+      "Recall": report[class_name]["recall"],
+      "F1": report[class_name]["f1-score"],
+      "Support": report[class_name]["support"]
+    })
+
+
+class_results_df = pd.DataFrame(class_results)
+display(class_results_df)
