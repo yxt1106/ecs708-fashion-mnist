@@ -1,0 +1,3 @@
+Model,Validation Accuracy
+Logistic Regression,0.8412
+Random Forest,0.8603

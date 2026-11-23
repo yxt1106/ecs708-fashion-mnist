@@ -1,0 +1,4 @@
+Learning Rate,Parameters,Best Epoch,Epochs Trained,Train Accuracy,Validation Accuracy,Validation Loss
+LR = 0.0001,235146,20,20,0.8862,0.8607,0.39680921306610106
+LR = 0.001,235146,12,17,0.9242,0.8707,0.36542982692718506
+LR = 0.01,235146,8,13,0.8809,0.8524,0.4046795760154724

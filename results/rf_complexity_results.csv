@@ -1,0 +1,6 @@
+Max Depth,Training Accuracy,Validation Accuracy
+3,0.6879,0.6894
+5,0.7748,0.7658
+10,0.9198,0.8464
+20,0.9963,0.8585
+None,0.9966,0.8624

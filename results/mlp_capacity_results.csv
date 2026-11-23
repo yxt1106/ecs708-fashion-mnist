@@ -1,0 +1,4 @@
+Architecture,Parameters,Best Epoch,Epocs Trained,Train Accuracy,Validation Accuracy,Validation Loss
+"Small (128, 64)",109386,14,19,0.9141,0.8628,0.38267591238021853
+"Baseline (256, 128)",235146,12,17,0.9242,0.8707,0.36542982692718506
+"Large (512, 256)",535818,11,16,0.9303,0.8757,0.3631332562446594
